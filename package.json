@@ -1,0 +1,33 @@
+{
+  "name": "mail-risk-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mail Risk Intelligence - two-agent extraction and risk pipeline over an email corpus",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @mri/api",
+    "dev:web": "npm run dev -w @mri/web",
+    "build": "npm run build -w @mri/web",
+    "start": "npm run start -w @mri/api",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p eval/tsconfig.json",
+    "eval": "tsx eval/run.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0",
+    "zod": "^3.24.1"
+  }
+}

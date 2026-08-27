@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "corpus": "mock_mailbox_data.json",
+  "_readme": [
+    "Hand-authored ground truth for the 10 seed emails, written by reading them.",
+    "",
+    "It is deliberately NOT exact-match. LLM output legitimately varies in wording,",
+    "tag vocabulary and how finely it splits entities, so every assertion is a",
+    "'must contain' set:",
+    "",
+    "  expectedRisk            Exact match scores 1.0, an adjacent band scores 0.5,",
+    "                          anything further scores 0.",
+    "  minimumAcceptableRisk   Optional floor. Scoring below it counts as a CRITICAL",
+    "                          MISS and is reported separately from the average - a",
+    "                          missed wire fraud is not the same kind of error as a",
+    "                          slightly over-cautious benign email.",
+    "  requiredTagGroups       Array of synonym groups. At least one tag from each",
+    "                          group must be present. Models name things differently;",
+    "                          the concept is what matters.",
+    "  forbiddenTags           Tags that must NOT appear. Used on benign emails to",
+    "                          measure precision, not just recall.",
+    "  requiredEntities        Each must be matched by some extracted entity of the",
+    "                          same type.",
+    "  requiredRelationships   Each must be matched by some extracted relationship.",
+    "                          Direction matters; type is only checked when typeAnyOf",
+    "                          is given, since our relationship vocabulary is open.",
+    "",
+    "Matching rule for every *AnyOf / match field: the candidate string is",
+    "lowercased with '$', ',' and whitespace removed, then tested for substring",
+    "containment. So '$184,500' normalises to '184500' and matches '184500'."
+  ],
+  "cases": [
+    {
+      "id": "E001",
+      "label": "CEO fraud / business email compromise",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        ["urgency", "time-pressure", "urgent"],
+        [
+          "impersonation",
+          "ceo-fraud",
+          "bec",
+          "spoofing",
+          "phishing",
+          "fraud",
+          "financial-anomaly",
+          "payment-redirect",
+          "wire-fraud"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["harrington", "james"] },
+        { "type": "amount", "matchAnyOf": ["184500"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["harrington", "james"],
+          "targetMatchAnyOf": ["escrow", "finance", "arcline"]
+        }
+      ],
+      "notes": "Sender domain arclne-corp.com is a typosquat of arcline.com. Urgency, secrecy, out-of-band account details and a large round-ish wire are the classic BEC stack."
+    },
+    {
+      "id": "E002",
+      "label": "Routine IT maintenance notice (benign)",
+      "expectedRisk": "none",
+      "requiredTagGroups": [],
+      "forbiddenTags": [
+        "threat-language",
+        "mnpi-risk",
+        "financial-anomaly",
+        "phishing",
+        "data-exfiltration"
+      ],
+      "requiredEntities": [],
+      "requiredRelationships": [],
+      "notes": "Precision control. Internal sender, no ask, no financial or personal data."
+    },
+    {
+      "id": "E003",
+      "label": "Insider data exfiltration ahead of resignation",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        [
+          "data-exfiltration",
+          "insider-threat",
+          "exfiltration",
+          "data-loss",
+          "confidential-data",
+          "ip-theft"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["moreno"] },
+        { "type": "organization", "matchAnyOf": ["meridian"] },
+        { "type": "organization", "matchAnyOf": ["talbot"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["moreno"],
+          "targetMatchAnyOf": ["arcline", "meridian", "talbot"]
+        }
+      ],
+      "notes": "Work address to personal fastmail, stated intent, confidential attachment, explicit instruction to avoid the work email. Attachment text carries the $1.2M / $800K figures."
+    },
+    {
+      "id": "E004",
+      "label": "Vendor invoice with redirected bank details",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        [
+          "payment-redirect",
+          "invoice-fraud",
+          "financial-anomaly",
+          "bank-detail-change",
+          "payment-fraud",
+          "fraud",
+          "vendor-fraud"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "organization", "matchAnyOf": ["northgate"] },
+        { "type": "amount", "matchAnyOf": ["47300"] },
+        { "type": "account", "matchAnyOf": ["9902"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["northgate"],
+          "targetMatchAnyOf": ["arcline", "accountspayable", "accounts-payable"]
+        }
+      ],
+      "notes": "The tell is cross-email: E009 establishes account ending 6621 as the account on file for the same vendor. A single-email model can still flag the unsolicited bank-detail change."
+    },
+    {
+      "id": "E005",
+      "label": "Material non-public information tip",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        [
+          "mnpi-risk",
+          "mnpi",
+          "insider-trading",
+          "market-abuse",
+          "material-non-public-information",
+          "securities-violation"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["tanaka"] },
+        { "type": "person", "matchAnyOf": ["marcus"] },
+        { "type": "organization", "matchAnyOf": ["halvorsen"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["tanaka"],
+          "targetMatchAnyOf": ["marcus", "halvorsen"]
+        }
+      ],
+      "notes": "Undisclosed deal, trading suggestion, personal address, instruction to delete. Textbook market abuse."
+    },
+    {
+      "id": "E006",
+      "label": "Threatening message from external counterparty",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        [
+          "threat-language",
+          "threat",
+          "harassment",
+          "intimidation",
+          "violence",
+          "physical-threat"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["dubois"] },
+        { "type": "person", "matchAnyOf": ["pillai"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["dubois"],
+          "targetMatchAnyOf": ["pillai", "arcline"]
+        }
+      ],
+      "notes": "Veiled physical threat plus knowledge of the office location. No financial angle - checks that the risk model is not purely money-driven."
+    },
+    {
+      "id": "E007",
+      "label": "HR holiday schedule (benign)",
+      "expectedRisk": "none",
+      "requiredTagGroups": [],
+      "forbiddenTags": [
+        "threat-language",
+        "mnpi-risk",
+        "financial-anomaly",
+        "phishing",
+        "data-exfiltration"
+      ],
+      "requiredEntities": [],
+      "requiredRelationships": [],
+      "notes": "Precision control. Has an attachment, so it also checks that attachments alone do not inflate risk."
+    },
+    {
+      "id": "E008",
+      "label": "Credential phishing via lookalike domain",
+      "expectedRisk": "high",
+      "minimumAcceptableRisk": "medium",
+      "requiredTagGroups": [
+        [
+          "phishing",
+          "credential-harvesting",
+          "credential-theft",
+          "spoofing",
+          "impersonation",
+          "malicious-link"
+        ],
+        ["urgency", "time-pressure", "urgent"]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["pillai"] },
+        { "type": "organization", "matchAnyOf": ["arcline", "arclline"] }
+      ],
+      "requiredRelationships": [],
+      "notes": "Sender domain arclline-portal.com and link host arclline-portal-secure.com are lookalikes of arcline.com. No relationship assertion - this email is about a link, not a party-to-party interaction."
+    },
+    {
+      "id": "E009",
+      "label": "Legitimate vendor invoice (benign baseline)",
+      "expectedRisk": "none",
+      "requiredTagGroups": [],
+      "forbiddenTags": [
+        "payment-redirect",
+        "fraud",
+        "phishing",
+        "threat-language",
+        "mnpi-risk"
+      ],
+      "requiredEntities": [
+        { "type": "organization", "matchAnyOf": ["northgate"] },
+        { "type": "amount", "matchAnyOf": ["13900"] },
+        { "type": "account", "matchAnyOf": ["6621"] }
+      ],
+      "requiredRelationships": [],
+      "notes": "The control for E004: same vendor, normal terms, the account that is genuinely on file. If this scores high, the pipeline is pattern-matching on the word 'invoice' rather than on anomaly."
+    },
+    {
+      "id": "E010",
+      "label": "Whistleblower report of accounting irregularity",
+      "expectedRisk": "medium",
+      "minimumAcceptableRisk": "low",
+      "requiredTagGroups": [
+        [
+          "financial-anomaly",
+          "accounting-irregularity",
+          "financial-misconduct",
+          "whistleblower",
+          "internal-controls",
+          "fraud"
+        ]
+      ],
+      "requiredEntities": [
+        { "type": "person", "matchAnyOf": ["ainsley", "robert"] },
+        { "type": "amount", "matchAnyOf": ["300000", "300k"] }
+      ],
+      "requiredRelationships": [
+        {
+          "sourceMatchAnyOf": ["ainsley", "robert"],
+          "targetMatchAnyOf": ["arcline", "finance", "marketing"]
+        }
+      ],
+      "notes": "Deliberately mid-band. The email reports a concern rather than being the misconduct itself, and the reporter is anonymous - a defensible 'medium' rather than 'high'. Adjacent-band scoring means a model answering 'high' still gets partial credit."
+    }
+  ]
+}

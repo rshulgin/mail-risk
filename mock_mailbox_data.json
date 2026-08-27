@@ -1,0 +1,114 @@
+{
+  "emails": [
+    {
+      "id": "E001",
+      "from": "j.harrington-ceo@arclne-corp.com",
+      "to": ["finance-ops@arcline.com"],
+      "date": "2026-06-02T08:14:00Z",
+      "subject": "URGENT - confidential wire needed before noon",
+      "body": "Hi, I'm in back-to-back board meetings and can't talk. We're closing a time-sensitive acquisition and I need Finance to wire $184,500 to our new escrow partner today before 12pm. I'll send the account details from my personal phone in a follow-up - please treat this as confidential and don't loop in anyone else until it's done. This cannot wait. - James",
+      "attachments": []
+    },
+    {
+      "id": "E002",
+      "from": "it-notifications@arcline.com",
+      "to": ["all-staff@arcline.com"],
+      "date": "2026-06-02T09:00:00Z",
+      "subject": "Scheduled maintenance: VPN upgrade this weekend",
+      "body": "Hi all, we'll be upgrading the VPN client Saturday 10pm-2am. You may need to reinstall the client Monday morning. No action needed otherwise. Reach out to IT helpdesk with questions.",
+      "attachments": []
+    },
+    {
+      "id": "E003",
+      "from": "d.moreno@arcline.com",
+      "to": ["dmoreno.private@fastmail.com"],
+      "date": "2026-06-03T22:41:00Z",
+      "subject": "fwd: Q3 roadmap + client contracts (for me)",
+      "body": "Forwarding these before I officially resign next week. After how they handled my promotion review I don't feel bad taking copies of the Meridian and Talbot contracts with me. Don't reply to this from your work email.",
+      "attachments": [
+        {
+          "filename": "Q3_roadmap_internal.pdf",
+          "extracted_text": "Internal Q3 Roadmap - Confidential. Meridian Corp renewal: $1.2M ARR, at risk. Talbot Industries expansion: $800K opportunity, decision due July."
+        }
+      ]
+    },
+    {
+      "id": "E004",
+      "from": "billing@northgate-suppliers.com",
+      "to": ["accounts-payable@arcline.com"],
+      "date": "2026-06-04T11:20:00Z",
+      "subject": "Invoice #NS-4471 - please note updated payment details",
+      "body": "Hello, please find attached invoice #NS-4471 for $47,300, due in 10 days. Note that we've recently changed banking providers - please use the new account details on the invoice going forward rather than the account on file. Let us know once payment is scheduled. Thank you.",
+      "attachments": [
+        {
+          "filename": "invoice_NS-4471.pdf",
+          "extracted_text": "Northgate Suppliers Inc. Invoice #NS-4471. Amount due: $47,300.00. Previous invoices (NS-4102, NS-4188) were $12,400 and $13,900 respectively to account ending 6621. New payment account: routing 044000037, account ending 9902. Please update your records."
+        }
+      ]
+    },
+    {
+      "id": "E005",
+      "from": "r.tanaka@arcline.com",
+      "to": ["personal.marcus.k@gmail.com"],
+      "date": "2026-06-05T19:02:00Z",
+      "subject": "hey - heads up before Friday",
+      "body": "Hey Marcus, can't say much but the Halvorsen deal is basically done, announcement is Friday morning. If you were ever going to pick up some shares, now would be the time, before the market catches on. Delete this after reading, obviously.",
+      "attachments": []
+    },
+    {
+      "id": "E006",
+      "from": "k.dubois.ext@partnerlogistics.com",
+      "to": ["s.pillai@arcline.com"],
+      "date": "2026-06-06T14:55:00Z",
+      "subject": "you'll regret pulling out of this contract",
+      "body": "You people have wasted six months of my time and now you're just walking away? I know where your office is and I know people. This isn't over, you'll be hearing from me again and you won't like how.",
+      "attachments": []
+    },
+    {
+      "id": "E007",
+      "from": "hr@arcline.com",
+      "to": ["all-staff@arcline.com"],
+      "date": "2026-06-07T10:00:00Z",
+      "subject": "Summer holiday schedule + office closure dates",
+      "body": "Hi everyone, attached is the summer holiday calendar for the office. Note the building will be closed July 3-5. Enjoy the summer!",
+      "attachments": [
+        {
+          "filename": "holiday_calendar.pdf",
+          "extracted_text": "Office closures: July 3-5 (Independence Day), Sept 7 (Labor Day). Standard PTO request process applies as usual."
+        }
+      ]
+    },
+    {
+      "id": "E008",
+      "from": "security-alert@arclline-portal.com",
+      "to": ["s.pillai@arcline.com"],
+      "date": "2026-06-08T07:33:00Z",
+      "subject": "Action required: your password expires in 24 hours",
+      "body": "Your Arcline account password will expire in 24 hours. To avoid losing access, please verify your identity and reset your password immediately using the secure link below: hxxp://arclline-portal-secure.com/reset?id=88213. Failure to act will result in account suspension.",
+      "attachments": []
+    },
+    {
+      "id": "E009",
+      "from": "billing@northgate-suppliers.com",
+      "to": ["accounts-payable@arcline.com"],
+      "date": "2026-05-04T11:00:00Z",
+      "subject": "Invoice #NS-4188 - payment due",
+      "body": "Hello, please find attached our monthly invoice. Payment terms are net 15 as usual. Let us know if you have any questions.",
+      "attachments": [
+        {
+          "filename": "invoice_NS-4188.pdf",
+          "extracted_text": "Northgate Suppliers Inc. Invoice #NS-4188. Amount due: $13,900.00. Payment account: routing 044000037, account ending 6621. Terms: net 15."
+        }
+      ]
+    },
+    {
+      "id": "E010",
+      "from": "anonymous.concern@protonmail.com",
+      "to": ["compliance@arcline.com"],
+      "date": "2026-06-09T02:15:00Z",
+      "subject": "concerns about Q2 numbers",
+      "body": "I work in the finance team and I don't want to give my name yet. I've seen the CFO, Robert Ainsley, ask two people on my team to move about $300K of Q2 marketing spend into a different cost center right before the board review, with no clear business reason given. I have screenshots if someone wants to follow up properly.",
+      "attachments": []
+    }
+  ]
+}

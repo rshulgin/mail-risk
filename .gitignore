@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+data/
+*.db
+*.db-journal
+eval/results/
+.DS_Store
+*.log

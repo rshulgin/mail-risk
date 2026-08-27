@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Tailwind v4 reads @theme and generates utilities, so a risk
+ * level maps to exactly one colour everywhere in the app: `bg-risk-high`,
+ * `text-risk-high`, `border-risk-high-border`. Adding a level means editing
+ * this block and nothing else.
+ *
+ * Foreground/background pairs below are chosen to clear WCAG AA (4.5:1) for
+ * badge text.
+ */
+@theme {
+  --color-risk-none: oklch(0.55 0.02 250);
+  --color-risk-none-bg: oklch(0.96 0.005 250);
+  --color-risk-none-border: oklch(0.88 0.01 250);
+
+  --color-risk-low: oklch(0.5 0.12 200);
+  --color-risk-low-bg: oklch(0.96 0.03 200);
+  --color-risk-low-border: oklch(0.85 0.06 200);
+
+  --color-risk-medium: oklch(0.5 0.13 65);
+  --color-risk-medium-bg: oklch(0.96 0.05 80);
+  --color-risk-medium-border: oklch(0.84 0.09 75);
+
+  --color-risk-high: oklch(0.48 0.19 25);
+  --color-risk-high-bg: oklch(0.96 0.03 25);
+  --color-risk-high-border: oklch(0.84 0.08 25);
+
+  --color-surface: oklch(1 0 0);
+  --color-surface-muted: oklch(0.98 0.003 250);
+  --color-ink: oklch(0.25 0.01 250);
+  --color-ink-muted: oklch(0.52 0.01 250);
+  --color-line: oklch(0.91 0.005 250);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink);
+}
