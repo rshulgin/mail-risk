@@ -103,3 +103,84 @@ npm start       api scaffold boots on the configured port
   same repository interface if it fights.
 - Badge colour contrast is asserted by intent in the token comments, not yet
   measured. To be checked in slice 4.
+
+---
+
+## Slice 1 — Domain contracts + storage
+
+**Goal:** the shared Zod schemas both agents must satisfy, the canonical entity
+rules, and a SQLite layer that can hold a cross-email graph plus a full audit
+trail.
+
+### One deviation, taken deliberately
+
+**Upgraded zod 3 → 4.** Slice 2 needs JSON Schema to constrain the models
+(Ollama's `format`, Gemini's `responseSchema`), and zod 4 ships
+`z.toJSONSchema()` natively — zod 3 would have meant adding
+`zod-to-json-schema`. The agent raised this before writing any schema, on the
+grounds that discovering it one slice later would mean rewriting the schemas
+rather than just adding a dependency. Also confirmed by probe, not assumption,
+that `node:sqlite` works on the pinned Node with no experimental warning, so
+the `better-sqlite3` fallback stays unused.
+
+### Design decisions worth defending
+
+**Open vocabularies, closed taxonomies.** Risk *levels* and entity *types* are
+closed enums — the UI has to colour them and the eval has to score them. Risk
+*tags* and relationship *types* are open strings, normalised to kebab- and
+snake-case respectively. A closed tag enum would silently discard a risk
+category we did not think of; the cost is only a messier tag cloud.
+
+**Canonical keys merge on formatting, never on inference.** `normalizeEntityKey`
+collapses `James Harrington` / `J. Harrington` / `j.harrington-ceo@…` to
+`j harrington`, and `$1.2M` / `$1,200,000` to `1200000`. It deliberately does
+*not* merge `Northgate` into `Northgate Suppliers` — that is a guess, and in a
+graph used for risk work a wrongly merged node invents a connection that was
+never observed. Under-merging is visible and fixable; over-merging is neither.
+The lookalike-domain test pins this down: `arcline.com` and
+`arclline-portal.com` must stay separate, which is the whole point of E008.
+
+**Unresolvable relationship endpoints drop their edge.** Agent B returns
+relationships as free strings that may not match its own entity list. The
+resolver tries canonical key, then exact display name, then unique token
+containment — and returns null when two candidates match equally well. No
+phantom nodes.
+
+**Mentions and relationships are keyed by run, not by email.** Reprocessing
+produces a fresh graph fragment; the old one stays queryable for the audit
+trail but drops out of every "current graph" query, which all join
+`emails.latest_run_id`. Verified by a test that reprocesses an email and asserts
+the stale node disappears from the aggregate graph while its row survives.
+
+### Where the agent corrected itself
+
+- **`node:sqlite` row typing.** `.all()` returns
+  `Record<string, SQLOutputValue>[]`, which will not cast to a hand-written row
+  interface. The agent's first instinct was to double-cast through `unknown` at
+  each of the four call sites; it rejected that and instead declared the row
+  DTOs *as* SQL rows with an index signature — one honest declaration per DTO
+  rather than four scattered escape hatches.
+- **A path bug caught by a stray non-zero exit.** A verification command ended
+  with `ls data/` and failed. Root cause: npm runs a workspace script with the
+  cwd set to that workspace, so `DATABASE_PATH=./data/mail-risk.db` resolved
+  under `apps/api/` for `npm start` but at the repo root for other entry points
+  — two silently different databases. Fixed by anchoring relative paths to a
+  repo root derived from `import.meta.url`, and verified by booting from both
+  directories and confirming one database file. Worth noting that nothing in
+  the test suite would have caught this; it surfaced only because the exit code
+  of a throwaway `ls` was actually read rather than skimmed.
+
+### Verification
+
+```
+npm test        9 files, 73 tests passed
+npm run typecheck   shared, api, web, eval — clean
+npm run eval    still green after the zod 4 upgrade
+npm start       migrates, reports counts; identical DB path from repo root and from apps/api
+```
+
+### Carried forward
+
+- E010's ground-truth level (`medium`) is still open for the human to confirm;
+  it shapes what slice 2's prompt tuning optimises toward.
+- Badge colour contrast still asserted by intent, not measured. Slice 4.
