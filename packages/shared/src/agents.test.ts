@@ -54,3 +54,34 @@ describe('risk + graph schema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('confidence normalisation', () => {
+  it('accepts the 0-1 convention unchanged', () => {
+    const parsed = riskGraphResultSchema.parse({
+      risk: { level: 'high', rationale: 'x', confidence: 0.9 },
+    });
+    expect(parsed.risk.confidence).toBe(0.9);
+  });
+
+  it('rescales a percentage rather than rejecting it', () => {
+    const parsed = riskGraphResultSchema.parse({
+      risk: { level: 'high', rationale: 'x', confidence: 100 },
+    });
+    expect(parsed.risk.confidence).toBe(1);
+  });
+
+  it('rescales an intermediate percentage', () => {
+    const parsed = riskGraphResultSchema.parse({
+      risk: { level: 'medium', rationale: 'x', confidence: 75 },
+    });
+    expect(parsed.risk.confidence).toBe(0.75);
+  });
+
+  it('still rejects a value outside either convention', () => {
+    expect(
+      riskGraphResultSchema.safeParse({
+        risk: { level: 'high', rationale: 'x', confidence: 500 },
+      }).success,
+    ).toBe(false);
+  });
+});

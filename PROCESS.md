@@ -184,3 +184,93 @@ npm start       migrates, reports counts; identical DB path from repo root and f
 - E010's ground-truth level (`medium`) is still open for the human to confirm;
   it shapes what slice 2's prompt tuning optimises toward.
 - Badge colour contrast still asserted by intent, not measured. Slice 4.
+
+---
+
+## Slice 2 — Agent pipeline
+
+**Goal:** two chained agents, a provider abstraction, a degradation ladder that
+keeps the app useful when the model misbehaves, and `npm run eval` scoring the
+real pipeline.
+
+### One structural deviation from the plan
+
+The plan described **three `LlmProvider` implementations: ollama, gemini,
+rules**. Building it revealed that "rules" cannot honestly implement a
+prompt-to-text interface — it would have to parse the prompt back into an email
+to do its job. So the deterministic path moved down a layer: `LlmProvider` has
+two implementations (Ollama, Gemini), and the heuristics are an alternative
+*agent implementation* that needs no provider at all. User-facing behaviour is
+unchanged — `LLM_PROVIDER=rules` still works — but each agent can now fall back
+independently, which is what makes the degradation ladder possible.
+
+### The eval earned its keep three times
+
+Each finding below came from running `npm run eval`, not from reading code.
+
+**1. Optional-by-default fields silently gutted the output.**
+First run: 46% overall, and **0% tag, entity and relationship recall** — while
+risk levels scored 7/10. Zero across three independent components with one
+working is a structural fault, not model quality. Cause: Zod emits any field
+carrying a `.default()` as *optional* in JSON Schema, and Ollama's
+grammar-constrained decoding satisfies such a schema with the bare minimum. The
+model was returning `{"risk":{"level":"high"}}` and stopping, because
+`risk.level` was the only required field in the entire document — then Zod's
+defaults quietly filled the rest with empty arrays, so nothing errored. Fixed
+with `requireAllProperties()`: **strict in what we ask for, lenient in what we
+accept.** The request demands every field; the schema still tolerates omissions.
+→ 46% → 61%, entity recall 0% → 25%.
+
+**2. A unit mismatch was costing a retry per email — and the retry made things
+worse.** Inspecting a single email's audit trail showed `confidence: 100`; the
+schema wanted 0–1. Worth noting what that cost: attempt 1 returned a rich entity
+list and was rejected *solely* over that one number, and the repair attempt came
+back terser, with one entity instead of five. The retry was actively destroying
+quality. Now the schema accepts either convention and normalises, and the prompt
+states the range.
+→ retried attempts 12 → 1, wall clock 885s → 570s.
+
+**3. The model was filing `arcline.com` as a `location`.** Fixed by defining
+each entity type in the prompt.
+
+Combined: **46% → 71%**, entity recall 0% → 55%, relationship recall 0% → 50%,
+critical misses 2 → 1.
+
+### A methodological caveat, stated plainly
+
+The risk prompt now lists the categories that should escalate to high (payment
+detail changes, internal material to personal mailboxes, unannounced
+developments plus a trading hint, threats, credential requests via links). These
+are taken from the **task brief's own description** of what this team looks for,
+not from inspecting which emails the model got wrong — the distinction matters,
+because the latter would be fitting the prompt to the answer key.
+
+The same caveat applies more strongly to the **rules provider, which scores 93%
+against the model's 71%**. That number should not be read as "heuristics beat
+the LLM". The heuristic signal table was written against this corpus and is
+pinned to it by tests; it is fitted to these ten emails and would degrade sharply
+on the eleventh. The LLM's 71% is the one that generalises. The rules exist to
+keep the app usable when no model is reachable, not to win the benchmark.
+
+### Remaining known weakness
+
+**E004 is a critical miss.** The model rates the redirected-invoice email `low`
+and reasons, in its own rationale, that "the change in payment account is a
+routine business update" — even with that exact pattern named in the prompt. It
+is a genuine capability limit of a 3B model, not a bug, and the eval reports it
+rather than hiding it. The cross-email tell (E009 establishes account …6621 for
+the same vendor) is invisible to a single-email pipeline; using the graph to
+feed prior context back into Agent B is the natural fix and is out of scope here.
+
+### Verification
+
+```
+npm test                       16 files, 148 tests passed
+npm run typecheck              clean
+npm run eval                   71% overall, 8/10 exact risk, 1 critical miss (ollama/qwen2.5:3b)
+npm run eval -- --provider=rules   93% overall, 10/10 exact risk, 0 critical misses
+```
+
+Failure modes covered by tests with a scripted fake provider: timeout, transient
+error, unparseable text, schema violation, repeated failure into fallback,
+provider entirely down, retry-budget exhaustion, and reprocessing.

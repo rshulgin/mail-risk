@@ -149,7 +149,9 @@ export function createRunRepo(db: DatabaseSync) {
 
     listInvocations(runId: string): InvocationRecord[] {
       const rows = db
-        .prepare('SELECT * FROM agent_invocations WHERE run_id = ? ORDER BY created_at, attempt')
+        // rowid, not `attempt`: several attempts can share a millisecond, and
+        // ordering by attempt number interleaves the two agents.
+        .prepare('SELECT * FROM agent_invocations WHERE run_id = ? ORDER BY created_at, rowid')
         .all(runId) as {
         id: string;
         run_id: string;

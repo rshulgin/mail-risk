@@ -36,6 +36,12 @@ export const config = {
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash',
   },
   pipeline: {
+    // Domains treated as "inside the organisation". Drives the lookalike-domain
+    // and personal-recipient heuristics.
+    internalDomains: (env.INTERNAL_DOMAINS ?? 'arcline.com')
+      .split(',')
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean),
     concurrency: int(env.PIPELINE_CONCURRENCY, 2),
     agentTimeoutMs: int(env.AGENT_TIMEOUT_MS, 60_000),
     agentMaxRetries: int(env.AGENT_MAX_RETRIES, 2),

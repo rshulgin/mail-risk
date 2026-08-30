@@ -38,7 +38,18 @@ export const riskGraphResultSchema = z.object({
     level: riskLevelSchema,
     rationale: z.string().default(''),
     tags: z.array(riskTagSchema).default([]),
-    confidence: z.number().min(0).max(1).default(0.5),
+    /**
+     * Models routinely answer this as a percentage. Rejecting `100` cost a
+     * full retry on almost every email, and the repair attempt came back
+     * terser than the original — losing entities that the first response had
+     * found. Accept either convention and normalise instead.
+     */
+    confidence: z
+      .number()
+      .min(0)
+      .max(100)
+      .default(0.5)
+      .transform((value) => (value > 1 ? value / 100 : value)),
   }),
   entities: z.array(extractedEntitySchema).default([]),
   relationships: z.array(extractedRelationshipSchema).default([]),
