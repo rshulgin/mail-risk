@@ -42,6 +42,15 @@ describe('heuristic extraction', () => {
     expect(facts.some((f) => f.kind === 'reference' && f.value.includes('4471'))).toBe(true);
   });
 
+  it('does not capture a sentence comma as part of an amount', () => {
+    // E004 body: "invoice #NS-4471 for $47,300, due in 10 days"
+    const facts = heuristicExtraction(byId.get('E004')!).facts;
+    const amounts = facts.filter((f) => f.kind === 'amount').map((f) => f.value);
+
+    expect(amounts.every((value) => !value.endsWith(','))).toBe(true);
+    expect(amounts.some((value) => value === '$47,300')).toBe(true);
+  });
+
   it('summarises without inventing content', () => {
     const email = byId.get('E002')!;
     const { summary } = heuristicExtraction(email);

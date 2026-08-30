@@ -274,3 +274,81 @@ npm run eval -- --provider=rules   93% overall, 10/10 exact risk, 0 critical mis
 Failure modes covered by tests with a scripted fake provider: timeout, transient
 error, unparseable text, schema violation, repeated failure into fallback,
 provider entirely down, retry-budget exhaustion, and reprocessing.
+
+---
+
+## Slice 3 — Ingestion + API
+
+**Goal:** every route the UI will need, and four ingestion paths that all
+converge on the same pipeline.
+
+### Dependency choice worth recording
+
+The obvious pick for PDF text is `pdf-parse`, and it is what most guides
+suggest. It is CJS and runs a self-test on import when `module.parent` is
+undefined, which misbehaves under plain ESM. Used **`unpdf`** instead — an
+ESM-first pdf.js wrapper needing no build step. Both it and `mailparser` were
+probed against a real PDF and a real `.eml` **before** any code was written on
+top of them, which is why neither needed rework later.
+
+The PDF fixture is generated with macOS `cupsfilter`, so the test suite has a
+genuine PDF to parse rather than a hand-forged byte string.
+
+### Design decisions
+
+**One convergence point.** Seed JSON, pasted text, `.eml` and `.pdf` all become
+a `RawEmail` and are stored by the same function. A bare PDF is turned into an
+email carrying the document as its only attachment, so the pipeline needs no
+special case for it — the brief's "it should flow through the same pipeline" is
+satisfied structurally, not by duplicated code paths.
+
+**POST returns 202, not 200.** The email is stored and queued, not assessed. On
+a local 3B model an assessment takes 30–90 seconds; holding the connection open
+for that would be a worse API and a worse UI. The client polls `status`.
+
+**`/api/health` carries the provider.** This is what lets the UI say "assessed
+by rules, not a model". Heuristic output being visually indistinguishable from
+model output would be the single most misleading thing this app could do, so
+the distinction is carried in the response body rather than left implicit.
+
+**The graph filter maintains its own invariant.** Filtering nodes by `minRisk`
+also drops edges whose endpoints no longer survive, so a client can never
+receive an edge pointing at a node it was not given. Asserted by a test under
+both the filtered and unfiltered case.
+
+**Restart recovery falls out of the storage design.** On boot the server seeds
+only what is missing (`externalId` uniqueness) and re-enqueues anything left in
+`pending` or `processing` by a previous process. No separate bookkeeping.
+
+### Bug found by looking at real output
+
+The end-to-end curl pass surfaced an amount stored as **`$47,300,`** — the
+regex's `[\d,]*` digit group was allowed to end on a comma, so it swallowed the
+sentence comma in "invoice #NS-4471 for $47,300, due in 10 days". The canonical
+key had masked it (both forms normalise to `47300`, so the graph still merged
+them correctly) and every test passed; it was visible only in a display name in
+the graph payload. Fixed to `\d+(?:,\d{3})*` with a regression test.
+
+Worth noting the pattern: this is the second defect this slice-and-verify loop
+has caught that no unit test would have — the first was the database-path bug in
+slice 1. Both came from running the thing and reading the output rather than
+from the suite going green.
+
+### Verification
+
+```
+npm test           19 files, 183 tests passed
+npm run typecheck  clean
+npm run eval -- --provider=rules   93%, 0 critical misses (no regression)
+```
+
+Live server, `LLM_PROVIDER=rules`, port 3099:
+- boot seeds 10 emails, queues them, all reach `completed`
+- `POST /api/emails` with pasted text → 202 → `high` / `payment-redirect`
+- `POST /api/emails` with `.eml` and with `.pdf` → both ingested, PDF text extracted
+- error paths return the right codes: 415 unsupported type, 400 empty body,
+  400 bad filter value, 404 unknown id and unknown route
+- reprocess → 2 runs, exactly one flagged `isLatest`
+- restart against the same database re-seeds nothing and re-queues nothing
+- `/api/graph` shows genuine cross-email joins: `northgate-suppliers.com` in 3
+  emails, account `6621` in 2 — the E004/E009 link the corpus was built around

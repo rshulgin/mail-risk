@@ -94,7 +94,9 @@ export function isLookalikeDomain(
 // Fact extraction
 // ---------------------------------------------------------------------------
 
-const AMOUNT_RE = /\$\s?\d[\d,]*(?:\.\d{1,2})?\s*(?:k|m|bn|million|thousand)?/gi;
+// Digit groups must not end on a comma: "$47,300, due in 10 days" was
+// capturing the sentence comma and storing the amount as "$47,300,".
+const AMOUNT_RE = /\$\s?\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:k|m|bn|million|thousand)?/gi;
 const ACCOUNT_RE = /(?:account|acct|routing)[^\d\n]{0,20}(\d{4,})/gi;
 const REFERENCE_RE = /(?:invoice|reference|ref)\s*#?\s*([A-Z]{1,5}-?\d{3,})/gi;
 const DATE_RE =
