@@ -38,6 +38,20 @@ provider rather than failing to start. See [.env.example](.env.example).
   tokens once, so a badge cannot drift between the inbox and the detail view.
 - **Ollama primary, Gemini optional, deterministic rules as fallback.** Nothing
   paid, nothing required.
+- **Default model `llama3.2:3b`, chosen by measurement rather than reputation.**
+  Scored against the golden dataset with `npm run eval --model=<name>` on
+  CPU-only inference:
+
+  | Model | Overall | Exact risk | Rules fallbacks | Wall clock |
+  | --- | --- | --- | --- | --- |
+  | `llama3.2:3b` (default) | 84% | 9/10 | 0 | ~13 min |
+  | `phi3:mini` | 79% | 7/10 | 3 | ~30 min |
+  | `qwen2.5:3b` | 71% | 8/10 | 0 | ~10 min |
+  | `mistral:latest` | not measurable | — | 15 | ~53 min |
+
+  `mistral` exceeded the 60s per-agent timeout on every call and was carried
+  entirely by the rules fallback; it needs `AGENT_TIMEOUT_MS=300000` to be
+  assessed fairly. Raise that value before reaching for a larger model.
 - **`npm run eval` is separate from `npm test`.** Model output varies between
   runs; letting it gate the test suite would make the suite unreliable.
 

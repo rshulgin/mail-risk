@@ -352,3 +352,57 @@ Live server, `LLM_PROVIDER=rules`, port 3099:
 - restart against the same database re-seeds nothing and re-queues nothing
 - `/api/graph` shows genuine cross-email joins: `northgate-suppliers.com` in 3
   emails, account `6621` in 2 — the E004/E009 link the corpus was built around
+
+---
+
+## Interlude — benchmarking the local models
+
+The human asked for real numbers on the local models rather than my estimates.
+Added a `--model` flag to the eval harness and ran all four against the golden
+dataset, sequentially (parallel runs on CPU-only inference would contend and
+distort the latency figures).
+
+| Model | Overall | Exact risk | Critical misses | Degraded | Rules fallbacks | Wall clock |
+| --- | --- | --- | --- | --- | --- | --- |
+| `rules` (no model) | 93% | 10/10 | 0 | — | — | ~0s |
+| **`llama3.2:3b`** | **84%** | 9/10 | 0 | **0** | **0** | 12.9 min |
+| `phi3:mini` | 79% | 7/10 | 0 | 3 | 3 | 30.2 min |
+| `qwen2.5:3b` | 71% | 8/10 | 1 | 0 | 0 | 9.5 min |
+| `mistral:latest` | *91%* | *10/10* | *0* | **9** | **15** | 53.4 min |
+
+### The finding that mattered was about my own design
+
+**Mistral's 91% was not mistral's score.** Extraction fell back to the
+heuristics on 9 of 10 emails and risk on 6, across 49 retried attempts. The
+per-email wall times gave it away: they cluster at *exactly* 361.5s, which is
+not work — it is 2 agents × 3 attempts × the 60s `AGENT_TIMEOUT_MS`, i.e. the
+retry ladder timing out end to end. A 7B model on CPU-only inference simply
+cannot answer inside 60 seconds.
+
+So the degradation ladder worked exactly as designed, and in doing so **masked a
+total provider failure behind an excellent-looking score**. "mistral: 91%, zero
+critical misses" would have gone straight into the README as the recommended
+model. The only reason it did not is the `pipeline health` line in the eval
+report — which existed mostly as an afterthought.
+
+Two lessons recorded rather than smoothed over:
+1. A graceful fallback is also a way to hide failure. Any metric over a system
+   with fallbacks has to report **who actually did the work**, or the fallback's
+   competence gets attributed to the component that failed.
+2. The estimates I gave before measuring ranked mistral first and llama3.2:3b
+   last. Measurement inverted the order completely.
+
+### Change made
+
+Default model switched from `qwen2.5:3b` to **`llama3.2:3b`** — 84% vs 71%, both
+with zero fallbacks, so both figures are genuinely the model's own work. Pinned
+by a config test, with the comparison table recorded in `.env.example` and the
+README so the choice is auditable rather than asserted.
+
+`AGENT_TIMEOUT_MS` is left at 60s, which suits the 3B default; `.env.example`
+now documents that larger models need roughly 300s and that a run reporting many
+"degraded" emails is the signal to raise it.
+
+**Still outstanding:** the eval reports one blended score. It should separate
+model-attributable from fallback-assisted results, so a provider that never
+succeeds cannot post 91% again. Proposed for slice 5.

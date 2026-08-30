@@ -10,6 +10,12 @@ describe('config', () => {
     expect(config.pipeline.agentTimeoutMs).toBeGreaterThan(0);
   });
 
+  it('defaults to the model that measured best on the golden dataset', () => {
+    // llama3.2:3b scored 84% with zero fallbacks; qwen2.5:3b scored 71%.
+    // See .env.example for the full comparison.
+    expect(config.llm.ollamaModel).toBe('llama3.2:3b');
+  });
+
   it('anchors relative paths to the repo root, not the working directory', () => {
     expect(isAbsolute(config.databasePath)).toBe(true);
     expect(config.databasePath.startsWith(REPO_ROOT)).toBe(true);

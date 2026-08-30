@@ -31,7 +31,7 @@ export const config = {
   llm: {
     provider: (env.LLM_PROVIDER ?? 'ollama') as 'ollama' | 'gemini' | 'rules',
     ollamaBaseUrl: env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
-    ollamaModel: env.OLLAMA_MODEL ?? 'qwen2.5:3b',
+    ollamaModel: env.OLLAMA_MODEL ?? 'llama3.2:3b',
     geminiApiKey: env.GEMINI_API_KEY,
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash',
   },
