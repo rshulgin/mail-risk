@@ -17,9 +17,10 @@ import { aggregate, scoreCase, type ActualResult, type CaseScore } from './score
  * `--threshold` is passed.
  *
  * Flags:
- *   --threshold=0.7   exit non-zero if the overall score falls below this
- *   --provider=rules  override LLM_PROVIDER for this run
- *   --limit=3         score only the first N cases, for a quick loop
+ *   --threshold=0.7      exit non-zero if the overall score falls below this
+ *   --provider=rules     override LLM_PROVIDER for this run
+ *   --model=mistral      override the model, for comparing local models
+ *   --limit=3            score only the first N cases, for a quick loop
  */
 
 const flag = (name: string): string | undefined =>
@@ -40,9 +41,17 @@ async function main(): Promise<number> {
   }
 
   const providerOverride = flag('provider');
-  const effectiveConfig = providerOverride
-    ? { ...config, llm: { ...config.llm, provider: providerOverride as 'ollama' | 'gemini' | 'rules' } }
-    : config;
+  const modelOverride = flag('model');
+  const effectiveConfig = {
+    ...config,
+    llm: {
+      ...config.llm,
+      ...(providerOverride
+        ? { provider: providerOverride as 'ollama' | 'gemini' | 'rules' }
+        : {}),
+      ...(modelOverride ? { ollamaModel: modelOverride, geminiModel: modelOverride } : {}),
+    },
+  };
 
   const resolution = await resolveProvider(effectiveConfig);
   const providerLabel = resolution.provider
@@ -65,6 +74,7 @@ async function main(): Promise<number> {
     provider: resolution.provider,
     timeoutMs: config.pipeline.agentTimeoutMs,
     maxRetries: config.pipeline.agentMaxRetries,
+    internalDomains: config.pipeline.internalDomains,
   });
 
   const corpus = seedCorpusSchema.parse(JSON.parse(readFileSync(config.seedPath, 'utf8')));
