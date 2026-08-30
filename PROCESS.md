@@ -406,3 +406,74 @@ now documents that larger models need roughly 300s and that a run reporting many
 **Still outstanding:** the eval reports one blended score. It should separate
 model-attributable from fallback-assisted results, so a provider that never
 succeeds cannot post 91% again. Proposed for slice 5.
+
+---
+
+## Slice 4 — Web app
+
+**Goal:** an inbox, a detail view, an entities panel, and the ingest form —
+usable on a phone, with honest loading, empty and error states.
+
+### Decisions
+
+**Provenance is always on screen.** The provider banner names the model, and
+every risk verdict carries `provider/model · duration · confidence` beneath it.
+When the pipeline is on heuristics the banner turns amber and says so in
+words. Rule-based output rendered indistinguishably from model output would be
+the most misleading thing this interface could do, so it is designed to be
+impossible.
+
+**Risk is never colour alone.** The badge prints the level as text, carries an
+`sr-only` "Risk level:" prefix, and the coloured rule on an inbox row is a
+secondary cue rather than the only one.
+
+**Polling stops.** The store polls every 2s, but only while an email is
+`pending` or `processing`, and cancels itself once everything settles. An idle
+mailbox issues no requests. A failed poll is swallowed rather than tearing down
+a working screen; explicit loads own error reporting.
+
+**Narrow viewports swap rather than stack.** Below `md` the list and detail are
+mutually exclusive and the detail gains a back button — what a phone user
+expects from a mailbox. Verified live at 375px with `scrollWidth === clientWidth`,
+so there is no horizontal overflow.
+
+**The submit draft survives a rejection.** If the server refuses a paste, the
+error appears and the textarea keeps its contents. Pinned by a test, because
+it is exactly the kind of thing a refactor silently breaks.
+
+### Bug found by running it
+
+The first browser load showed the error state — correctly rendered, but backed
+by a genuine 500. The API log gave it away: `[api] listening on
+http://127.0.0.1:5173`. The dev-server harness sets `PORT`, my config read
+`PORT`, so **the API bound to the web server's port** and Vite's `/api` proxy
+had nothing at 3001.
+
+Renamed to `API_PORT`. `PORT` is claimed by too many things — dev harnesses,
+task runners, PaaS platforms — to be safe for a service that runs alongside
+another. Worth noting the error state did its job: the failure was legible on
+screen instead of being a blank page, which is what made the cause obvious.
+
+### Verification
+
+```
+npm test           23 files, 227 tests passed (43 of them web)
+npm run typecheck  clean
+npm run build      builds; 85 kB gzipped JS, 4 kB gzipped CSS
+```
+
+Live in a browser against the real API:
+- inbox renders 10 seeded emails with risk badges and coloured rules
+- detail shows rationale, tags, provenance line, grouped entities, relationships,
+  structured facts and the original content
+- 375px: single column, back button appears, **no horizontal scroll**
+- desktop: both panes visible, back button hidden
+- rule-based banner appears when running without a model
+
+### Carried forward
+
+- `npm run dev:rules` added so a reviewer can run the whole app with no model
+  installed. Uses shell env-var syntax, so it is POSIX-only; the cross-platform
+  route is to set `LLM_PROVIDER=rules` in `.env`.
+- Still outstanding from slice 2: the eval reports one blended score and should
+  separate model-attributable from fallback-assisted results.

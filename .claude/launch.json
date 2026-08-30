@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mri-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:rules"],
+      "port": 5173
+    }
+  ]
+}

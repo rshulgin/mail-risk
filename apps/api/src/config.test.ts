@@ -5,6 +5,7 @@ import { config, resolveFromRoot, REPO_ROOT } from './config.js';
 
 describe('config', () => {
   it('runs on defaults with no .env present', () => {
+    expect(config.port).toBe(3001);
     expect(config.llm.provider).toBe('ollama');
     expect(config.pipeline.concurrency).toBeGreaterThan(0);
     expect(config.pipeline.agentTimeoutMs).toBeGreaterThan(0);

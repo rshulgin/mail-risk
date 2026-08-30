@@ -12,8 +12,25 @@ email, assess risk, and build a cross-email entity graph.
 nvm use            # Node 24+
 npm install
 npm test           # unit + integration, no model required
-npm run eval       # score the pipeline against the golden dataset
-npm run dev        # api + web
+npm run dev        # api on :3001, web on :5173
+```
+
+Then open http://localhost:5173.
+
+If you would rather not install Ollama, run without any model at all:
+
+```bash
+npm run dev:rules
+```
+
+Everything still works — the pipeline falls back to deterministic heuristics,
+and the UI says so in a banner rather than passing rule-based output off as
+model output.
+
+To score the pipeline against the golden dataset:
+
+```bash
+npm run eval
 ```
 
 No `.env` is required — every setting has a working default, and if the

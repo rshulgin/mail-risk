@@ -25,7 +25,15 @@ export const resolveFromRoot = (path: string): string =>
  * takes config as an argument, which keeps the pipeline testable.
  */
 export const config = {
-  port: int(env.PORT, 3001),
+  /**
+   * `API_PORT`, not `PORT`.
+   *
+   * `PORT` is set by all sorts of tooling — dev-server harnesses, task
+   * runners, PaaS platforms — and when something set it to the web server's
+   * port the API silently bound there too, leaving Vite's /api proxy pointing
+   * at nothing. A specific name cannot be claimed by accident.
+   */
+  port: int(env.API_PORT, 3001),
   databasePath: resolveFromRoot(env.DATABASE_PATH ?? './data/mail-risk.db'),
   seedPath: resolveFromRoot(env.SEED_PATH ?? './mock_mailbox_data.json'),
   llm: {
