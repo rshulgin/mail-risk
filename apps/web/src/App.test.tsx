@@ -217,3 +217,74 @@ describe('App', () => {
     expect(screen.getByText(/not a model/)).toBeInTheDocument();
   });
 });
+
+describe('graph view', () => {
+  beforeEach(() => {
+    mocked.health.mockResolvedValue(HEALTH);
+    mocked.listEmails.mockResolvedValue({ emails: [ITEM], total: 1 });
+  });
+
+  it('loads the graph when switched to, and lists entities accessibly', async () => {
+    mocked.graph.mockResolvedValue({
+      nodes: [
+        { id: 'n1', type: 'organization', name: 'Northgate Suppliers', mentionCount: 3, emailIds: ['e1', 'e2'], highestRisk: 'high' },
+        { id: 'n2', type: 'organization', name: 'Arcline', mentionCount: 8, emailIds: ['e1'], highestRisk: 'medium' },
+      ],
+      edges: [
+        { id: 'n1|invoices|n2', source: 'n1', target: 'n2', type: 'invoices', evidence: '', emailIds: ['e1'] },
+      ],
+    });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'graph' }));
+
+    // The canvas is aria-hidden, so the list is the accessible route in.
+    expect(await screen.findByRole('button', { name: /Northgate Suppliers/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Arcline/ })).toBeInTheDocument();
+  });
+
+  it('selecting an entity shows its connections and a way into the email', async () => {
+    mocked.graph.mockResolvedValue({
+      nodes: [
+        { id: 'n1', type: 'organization', name: 'Northgate Suppliers', mentionCount: 3, emailIds: ['e1'], highestRisk: 'high' },
+        { id: 'n2', type: 'organization', name: 'Arcline', mentionCount: 8, emailIds: ['e1'], highestRisk: 'medium' },
+      ],
+      edges: [
+        { id: 'n1|invoices|n2', source: 'n1', target: 'n2', type: 'invoices', evidence: '', emailIds: ['e1'] },
+      ],
+    });
+    mocked.getEmail.mockResolvedValue(DETAIL);
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'graph' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Northgate Suppliers/ }));
+
+    expect(await screen.findByText('Connections')).toBeInTheDocument();
+    expect(screen.getByText(/invoices/)).toBeInTheDocument();
+    expect(screen.getByText(/Seen in 1 email/)).toBeInTheDocument();
+
+    // And the graph is a route back into the mailbox.
+    await userEvent.click(screen.getByRole('button', { name: 'Open email' }));
+    expect(await screen.findByText('Classic BEC pattern.')).toBeInTheDocument();
+  });
+
+  it('explains an empty graph rather than showing a blank canvas', async () => {
+    mocked.graph.mockResolvedValue({ nodes: [], edges: [] });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'graph' }));
+
+    expect(await screen.findByText('No graph yet')).toBeInTheDocument();
+  });
+
+  it('offers a retry when the graph fails to load', async () => {
+    mocked.graph.mockRejectedValueOnce(
+      new ApiClientError('Could not reach the API. Is the server running?', 'network_error', 0),
+    );
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'graph' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the API');
+  });
+});

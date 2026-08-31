@@ -150,3 +150,66 @@ describe('aggregate', () => {
     expect(aggregate([])).toMatchObject({ cases: 0, overall: 0, entityRecall: 1 });
   });
 });
+
+describe('attribution', () => {
+  const withSources = (
+    id: string,
+    extraction: 'model' | 'rules',
+    risk: 'model' | 'rules',
+    level: 'high' | 'none' = 'high',
+  ) =>
+    scoreCase(caseOf({ id }), actual({ riskLevel: level, sources: { extraction, risk } }));
+
+  it('counts a case as model-driven only when both agents used the model', () => {
+    const result = aggregate([
+      withSources('A', 'model', 'model'),
+      withSources('B', 'model', 'rules'),
+      withSources('C', 'rules', 'rules'),
+    ]);
+
+    expect(result.attribution.modelDriven).toBe(1);
+    expect(result.attribution.fallbackAssisted).toBe(2);
+  });
+
+  it('separates the score the model earned from the score the fallback earned', () => {
+    // One case the model got right; two the fallback got wrong.
+    const result = aggregate([
+      withSources('A', 'model', 'model', 'high'),
+      withSources('B', 'rules', 'rules', 'none'),
+      withSources('C', 'rules', 'rules', 'none'),
+    ]);
+
+    const { modelDrivenScore, fallbackAssistedScore } = result.attribution;
+    expect(modelDrivenScore).toBe(1);
+    expect(fallbackAssistedScore).toBeLessThan(modelDrivenScore!);
+
+    // The blended figure sits between the two and reveals neither, which is
+    // exactly why attribution is reported alongside it.
+    expect(result.overall).toBeLessThan(modelDrivenScore!);
+    expect(result.overall).toBeGreaterThan(fallbackAssistedScore!);
+  });
+
+  it('exposes the mistral case: every call failed, yet the blended score is high', () => {
+    // All ten carried by the fallback, which happens to score well on this
+    // corpus. The blended number looks like a good model; attribution does not.
+    const scores = Array.from({ length: 10 }, (_, i) =>
+      withSources(`E${i}`, 'rules', 'rules', 'high'),
+    );
+    const result = aggregate(scores);
+
+    expect(result.overall).toBe(1);
+    expect(result.attribution.modelDriven).toBe(0);
+    expect(result.attribution.modelDrivenScore).toBeNull();
+  });
+
+  it('reports null rather than zero when a bucket is empty', () => {
+    const result = aggregate([withSources('A', 'model', 'model')]);
+    expect(result.attribution.fallbackAssisted).toBe(0);
+    expect(result.attribution.fallbackAssistedScore).toBeNull();
+  });
+
+  it('treats a result with no recorded sources as rules', () => {
+    const result = aggregate([scoreCase(caseOf({ id: 'A' }), actual())]);
+    expect(result.attribution.modelDriven).toBe(0);
+  });
+});

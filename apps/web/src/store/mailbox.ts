@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { EmailDetail, EmailFilters, EmailListItem, Health } from '../api/types.js';
+import type {
+  EmailDetail,
+  EmailFilters,
+  EmailListItem,
+  GraphEdge,
+  GraphNode,
+  Health,
+} from '../api/types.js';
 import { api, ApiClientError } from '../api/client.js';
 
 /**
@@ -13,6 +20,7 @@ import { api, ApiClientError } from '../api/client.js';
 const POLL_INTERVAL_MS = 2_000;
 
 export type AsyncStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type View = 'inbox' | 'graph';
 
 interface MailboxState {
   emails: EmailListItem[];
@@ -30,6 +38,14 @@ interface MailboxState {
   submitting: boolean;
   submitError: string | null;
 
+  view: View;
+  graph: { nodes: GraphNode[]; edges: GraphEdge[] } | null;
+  graphStatus: AsyncStatus;
+  graphError: string | null;
+
+  setView(view: View): void;
+  loadGraph(): Promise<void>;
+  openEmailFromGraph(id: string): Promise<void>;
   loadHealth(): Promise<void>;
   loadEmails(): Promise<void>;
   select(id: string | null): Promise<void>;
@@ -65,6 +81,7 @@ export const useMailbox = create<MailboxState>((set, get) => {
         set({ detail, detailStatus: 'ready' });
       }
 
+      if (get().view === 'graph') await get().loadGraph();
       if (!hasWorkInFlight(emails)) get().stopPolling();
     } catch {
       // A failed poll is not worth destroying a working screen over; the next
@@ -84,6 +101,30 @@ export const useMailbox = create<MailboxState>((set, get) => {
     health: null,
     submitting: false,
     submitError: null,
+    view: 'inbox',
+    graph: null,
+    graphStatus: 'idle',
+    graphError: null,
+
+    setView(view) {
+      set({ view });
+      if (view === 'graph') void get().loadGraph();
+    },
+
+    async loadGraph() {
+      set({ graphStatus: 'loading', graphError: null });
+      try {
+        set({ graph: await api.graph(get().filters.minRisk), graphStatus: 'ready' });
+      } catch (error) {
+        set({ graphStatus: 'error', graphError: messageOf(error) });
+      }
+    },
+
+    /** Jump from a graph node straight to one of the emails it appears in. */
+    async openEmailFromGraph(id) {
+      set({ view: 'inbox' });
+      await get().select(id);
+    },
 
     async loadHealth() {
       try {

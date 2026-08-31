@@ -23,11 +23,19 @@ export interface ActualRelationship {
   type: string;
 }
 
+/** Which component actually produced each half of the result. */
+export interface ResultSources {
+  extraction: 'model' | 'rules';
+  risk: 'model' | 'rules';
+}
+
 export interface ActualResult {
   riskLevel: RiskLevel;
   tags: string[];
   entities: ActualEntity[];
   relationships: ActualRelationship[];
+  /** Omitted when running without a provider, where everything is rules. */
+  sources?: ResultSources;
 }
 
 export interface ComponentScore {
@@ -48,6 +56,7 @@ export interface CaseScore {
   entities: ComponentScore;
   relationships: ComponentScore;
   overall: number;
+  sources: ResultSources;
 }
 
 const describeEntity = (expected: { type: EntityType; matchAnyOf: string[] }): string =>
@@ -147,6 +156,7 @@ export function scoreCase(expected: EvalCase, actual: ActualResult): CaseScore {
       missing: relationshipsMissing,
     },
     overall,
+    sources: actual.sources ?? { extraction: 'rules', risk: 'rules' },
   };
 }
 
@@ -161,11 +171,38 @@ export interface Aggregate {
   tagRecall: number;
   entityRecall: number;
   relationshipRecall: number;
+  /**
+   * Who actually did the work.
+   *
+   * Without this, a provider that fails every single call still posts a good
+   * blended score, because the heuristic fallback quietly rescues it — which
+   * is exactly what happened when mistral timed out on all ten emails and the
+   * eval reported 91%. A benchmark over a system with fallbacks has to say
+   * which component earned the number.
+   */
+  attribution: {
+    modelDriven: number;
+    fallbackAssisted: number;
+    modelDrivenScore: number | null;
+    fallbackAssistedScore: number | null;
+  };
 }
 
 const ratio = (matched: number, total: number): number => (total === 0 ? 1 : matched / total);
 
+/** A case counts as model-driven only when both agents used the model. */
+const isModelDriven = (score: CaseScore): boolean =>
+  score.sources.extraction === 'model' && score.sources.risk === 'model';
+
+const meanOverall = (scores: readonly CaseScore[]): number | null =>
+  scores.length === 0
+    ? null
+    : scores.reduce((total, score) => total + score.overall, 0) / scores.length;
+
 export function aggregate(scores: readonly CaseScore[]): Aggregate {
+  const modelDriven = scores.filter(isModelDriven);
+  const fallbackAssisted = scores.filter((score) => !isModelDriven(score));
+
   const sum = (pick: (score: CaseScore) => number): number =>
     scores.reduce((total, score) => total + pick(score), 0);
 
@@ -193,5 +230,11 @@ export function aggregate(scores: readonly CaseScore[]): Aggregate {
     tagRecall: ratio(totals.tagMatched, totals.tagTotal),
     entityRecall: ratio(totals.entityMatched, totals.entityTotal),
     relationshipRecall: ratio(totals.relMatched, totals.relTotal),
+    attribution: {
+      modelDriven: modelDriven.length,
+      fallbackAssisted: fallbackAssisted.length,
+      modelDrivenScore: meanOverall(modelDriven),
+      fallbackAssistedScore: meanOverall(fallbackAssisted),
+    },
   };
 }

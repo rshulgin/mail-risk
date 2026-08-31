@@ -477,3 +477,107 @@ Live in a browser against the real API:
   route is to set `LLM_PROVIDER=rules` in `.env`.
 - Still outstanding from slice 2: the eval reports one blended score and should
   separate model-attributable from fallback-assisted results.
+
+---
+
+## Slice 5 — Knowledge graph, attribution metric, docs
+
+**Goal:** the aggregate graph view, the eval fix carried forward from slice 2,
+and final documentation.
+
+### The attribution metric (carried from slice 2)
+
+The eval now reports **who actually produced each result**, because a
+fallback-assisted score is not the provider's score:
+
+```
+attribution   9/10 model-driven (81%), 1 fallback-assisted (94%)
+```
+
+A case counts as model-driven only when *both* agents used the model. When a
+provider contributes nothing, the report says so in as many words rather than
+printing a healthy-looking average. One of its tests is named for the case that
+motivated it — ten emails, every call failed, blended score 100%.
+
+### Graph implementation
+
+Built on `d3-force` (132 KB) with a hand-written canvas renderer rather than a
+wrapper library, which kept the styling on the project's own design tokens and
+the interaction under direct control.
+
+The geometry — transforms, zoom-about-cursor, hit testing, neighbourhood
+selection, fit-to-view — lives in `graph/layout.ts` as pure functions with 14
+tests. The component is then only responsible for drawing and events. That
+split is what made the canvas testable at all, since jsdom has neither a 2D
+context nor a `ResizeObserver`.
+
+**Canvas is invisible to assistive technology**, so the graph is paired with a
+real list of entities beside it. The list is the keyboard and screen-reader
+route to exactly the same selection — the same interaction in another modality,
+not a lesser fallback. Both the graph tests exercise the list, because that is
+the path a keyboard user takes.
+
+### Three bugs, each found by looking rather than by tests
+
+**1. Every node started at the origin.** The first render put the whole graph
+in one corner. I had initialised each simulation node with `x: 0, y: 0` —
+which defeats d3's own phyllotaxis seeding, leaves all 23 nodes coincident, and
+gives the charge force no direction to push in. d3 only seeds positions for
+nodes whose coordinates are *absent*. Fixed by not supplying them.
+
+Worth noting the diagnosis: rather than theorise, I measured the canvas, its
+container and the payload from the browser. The data was fine and the canvas
+was correctly sized, which ruled out everything except the layout itself.
+
+**2. Nodes shrank into specks.** Radius scaled by `min(1.4, scale)`, and a
+fitted graph sits near 0.3×. Now floored at 0.7×.
+
+**3. Labels stacked into mush** in the dense centre. Added a white halo stroke
+and simple box-collision avoidance: a label that would overlap one already
+painted is dropped rather than drawn on top.
+
+A fourth, subtler one: on resize the graph kept its old fit and drifted
+off-centre. Refitting unconditionally would yank the view out from under
+someone who had panned, so it now refits only while the user has not
+interacted — tracked by a single ref, reset by "Reset view".
+
+### Verification
+
+```
+npm test           24 files, 250 tests passed
+npm run typecheck  clean
+npm run build      93 kB gzipped JS, 4.6 kB gzipped CSS
+```
+
+In a real browser against the live API: graph renders 23 nodes and 8 edges from
+the seeded corpus; selecting a node rings it, highlights its neighbourhood and
+dims the rest; the side panel shows connections and links back into the
+mailbox; at 375px the canvas fits with no horizontal overflow and the entity
+list stacks below.
+
+---
+
+## Closing notes on the AI-agent workflow
+
+**What the slice discipline bought.** Seven stop-and-review points, each with a
+commit and a written entry. Every slice ended with commands actually run and
+their output read. Four defects surfaced this way that no unit test caught: the
+database-path collision (slice 1), the trailing-comma amount (slice 3), the
+`PORT` hijack (slice 4), and the collapsed graph layout (slice 5). Each was
+visible only by running the thing and looking at what came out.
+
+**Where the human redirected me, and it mattered.** Tailwind and Node 24 were
+specified up front. Ollama-primary replaced my Groq default. The golden dataset
+and `npm run eval` were the human's idea, not mine — and that harness went on
+to find the two most serious pipeline bugs and to overturn my model ranking. It
+was the single highest-leverage instruction in the project.
+
+**Where I was wrong.** My pre-measurement model estimates ranked mistral first
+and llama3.2:3b last; measurement inverted that completely. And my own
+degradation ladder hid a total provider failure behind a 91% score — a design I
+was pleased with, doing real damage to a benchmark, caught only by a
+pipeline-health line I had added almost as an afterthought.
+
+**What I would tell the next agent to do differently.** Report attribution from
+the first version of any metric over a system with fallbacks. The blended
+number is never the interesting one.

@@ -5,6 +5,7 @@ import { InboxList } from './components/InboxList.js';
 import { IngestForm } from './components/IngestForm.js';
 import { EmailDetail } from './components/EmailDetail.js';
 import { ProviderBanner } from './components/ProviderBanner.js';
+import { GraphView } from './components/GraphView.js';
 import { EmptyState, ErrorState, LoadingState } from './components/States.js';
 
 /**
@@ -31,6 +32,13 @@ export function App() {
     setFilters,
     reprocess,
     stopPolling,
+    view,
+    setView,
+    graph,
+    graphStatus,
+    graphError,
+    loadGraph,
+    openEmailFromGraph,
   } = useMailbox();
 
   useEffect(() => {
@@ -43,14 +51,51 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-line bg-surface border-b px-4 py-3 sm:px-6">
-        <h1 className="text-base font-semibold tracking-tight">Mail Risk Intelligence</h1>
-        <p className="text-ink-muted text-xs">Extraction, risk assessment and entity graph</p>
+      <header className="border-line bg-surface flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight">Mail Risk Intelligence</h1>
+          <p className="text-ink-muted text-xs">Extraction, risk assessment and entity graph</p>
+        </div>
+
+        <nav aria-label="View" className="border-line flex rounded-md border p-0.5">
+          {(['inbox', 'graph'] as const).map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              onClick={() => setView(candidate)}
+              aria-current={view === candidate ? 'page' : undefined}
+              className={`rounded px-3 py-1 text-sm font-medium capitalize ${
+                view === candidate ? 'bg-accent-bg text-accent' : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              {candidate}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <ProviderBanner health={health} />
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {view === 'graph' && (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {graphStatus === 'loading' && !graph && <LoadingState label="Building graph…" />}
+          {graphStatus === 'error' && (
+            <ErrorState
+              message={graphError ?? 'Could not load the graph.'}
+              onRetry={() => void loadGraph()}
+            />
+          )}
+          {graph && (
+            <GraphView
+              nodes={graph.nodes}
+              edges={graph.edges}
+              onOpenEmail={(id) => void openEmailFromGraph(id)}
+            />
+          )}
+        </div>
+      )}
+
+      <div className={`min-h-0 flex-1 flex-col md:flex-row ${view === 'inbox' ? 'flex' : 'hidden'}`}>
         {/* Inbox */}
         <section
           aria-label="Inbox"

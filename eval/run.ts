@@ -132,6 +132,7 @@ async function main(): Promise<number> {
         target: edge.target.displayName,
         type: edge.type,
       })),
+      sources: { extraction: outcome.extractionSource, risk: outcome.riskSource },
     };
 
     const score = scoreCase(testCase, result);
@@ -181,6 +182,34 @@ async function main(): Promise<number> {
     `\n  pipeline health      ${health.degraded} degraded, ${health.failed} failed, ` +
       `${health.retries} retried attempts (extraction fallbacks ${health.extractionFallbacks}, risk ${health.riskFallbacks})`,
   );
+
+  // Attribution matters more than the headline number. A provider that fails
+  // every call still scores well, because the heuristic fallback rescues it.
+  const { attribution } = totals;
+  if (resolution.provider) {
+    const modelScore =
+      attribution.modelDrivenScore === null ? 'n/a' : pct(attribution.modelDrivenScore);
+    const fallbackScore =
+      attribution.fallbackAssistedScore === null ? 'n/a' : pct(attribution.fallbackAssistedScore);
+
+    console.log(
+      `  attribution          ${attribution.modelDriven}/${totals.cases} model-driven (${modelScore}), ` +
+        `${attribution.fallbackAssisted} fallback-assisted (${fallbackScore})`,
+    );
+
+    if (attribution.modelDriven === 0) {
+      console.log(
+        `\n  !! ${providerLabel} produced no usable output on any email. The score above is`,
+      );
+      console.log('     entirely the rule-based fallback. Raise AGENT_TIMEOUT_MS or try a');
+      console.log('     smaller model before reading anything into it.');
+    } else if (attribution.fallbackAssisted > totals.cases / 3) {
+      console.log(
+        `\n  !! ${attribution.fallbackAssisted} of ${totals.cases} emails needed the rule-based fallback, so the`,
+      );
+      console.log(`     headline score overstates ${providerLabel}. Check AGENT_TIMEOUT_MS.`);
+    }
+  }
   console.log(`  wall clock           ${(durationMs / 1000).toFixed(1)}s\n`);
 
   mkdirSync(RESULTS_DIR, { recursive: true });
