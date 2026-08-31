@@ -283,3 +283,23 @@ describe('API', () => {
     });
   });
 });
+
+describe('seeding order', () => {
+  it('processes the corpus chronologically, not in file order', async () => {
+    const h2 = harness();
+    h2.ingest.seed(config.seedPath);
+
+    // The queue consumes pending ids in insertion order, and that order must
+    // put E009 (4 May) before E004 (4 June) so the account-on-file history
+    // exists by the time the redirected invoice is assessed.
+    const byId = new Map(
+      h2.storage.emails.list().map((email) => [email.id, email.externalId]),
+    );
+    const queued = h2.storage.emails
+      .idsWithStatus('pending')
+      .map((id) => byId.get(id));
+
+    expect(queued[0]).toBe('E009');
+    expect(queued.indexOf('E009')).toBeLessThan(queued.indexOf('E004'));
+  });
+});

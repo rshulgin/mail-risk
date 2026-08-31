@@ -581,3 +581,87 @@ pipeline-health line I had added almost as an afterthought.
 **What I would tell the next agent to do differently.** Report attribution from
 the first version of any metric over a system with fallbacks. The blended
 number is never the interesting one.
+
+---
+
+## Slice 6 — Cross-email context (fixing E004)
+
+**Goal:** close the one critical miss by giving Agent B the mailbox's memory.
+
+### The problem
+
+E004 is the hardest email in the corpus and the only one the pipeline got
+dangerously wrong. Read on its own it is a polite invoice mentioning updated
+payment details; `llama3.2:3b` rated it `low` and justified it, in its own
+rationale, as "a routine business update". The tell does not exist inside the
+email. It exists in E009, a month earlier: the same vendor, paid to account
+…6621. E004 says …9902.
+
+### The fix
+
+Before Agent B runs, the orchestrator derives candidate identifiers from the
+envelope and Agent A's account facts, asks the graph what it already knows
+about them, and renders that history into the prompt as prose. Deliberately
+*not* JSON — the point is for a 3B model to read it and notice a contradiction,
+and prose survives that better than a nested object.
+
+Amounts are excluded from the lookup on purpose: two emails sharing a figure is
+usually coincidence, and it would crowd the prompt for nothing.
+
+### The ordering problem, which was the real work
+
+The context is worthless if it arrives late. File order is E001…E010, so **E004
+was being assessed a full email before E009 existed to contradict it.** Seeding
+is now chronological, which is also just what a mailbox does.
+
+Fixing that exposed a latent bug: `idsWithStatus` ordered only by `created_at`,
+and seeding ten emails takes well under a millisecond, so every row shared a
+timestamp and the queue consumed them in arbitrary order. Chronological seeding
+would have been silently undone by it. Added a `rowid` tiebreak — the same
+class of bug as the audit-trail ordering in slice 2, and I did not recognise it
+until I saw the test fail.
+
+### Results, including what it cost
+
+| | Without context | With context | + precondition fix |
+| --- | --- | --- | --- |
+| Overall | 71% | 81% | **81%** |
+| Critical misses | **1 (E004)** | 0 | **0** |
+| False positives | 0 | **1 (E009)** | **0** |
+| Rules fallbacks | 0 | 3 | 2 |
+
+E004 moved `low` → `medium`, clearing its floor. E003 and E006 improved sharply
+as a side effect of the same guidance.
+
+The middle column is the honest cost. Telling the model that payment-detail
+changes are high risk made it over-eager, and it tagged the *legitimate* E009
+invoice as `payment-redirect` — a false positive on the corpus's precision
+control. The fix was to state the precondition the rule had always implied: an
+invoice restating the account it has always used is not a redirect. That is a
+clarification of the rule, not a patch aimed at one email, and false positives
+returned to zero.
+
+The longer prompt also pushes the model into the rules fallback more often
+(0 → 2 of 10). **The attribution metric added earlier in this slice is what made
+that visible**; the headline 81% alone would have concealed it.
+
+### An eval that was lying quietly
+
+Comparing the two context-enabled runs showed E005 at 80% in one and 37% in the
+next, and E010 at 73% then 88% — with `temperature: 0` set. Temperature alone
+does not make Ollama reproducible; sampling still varies between runs. Two runs
+of the same code disagreeing by 40 points on an email makes the eval a weather
+report rather than a regression gate, and it means some of the run-to-run deltas
+I attributed to my changes earlier in this project were partly noise.
+
+Fixed by pinning `seed` in the Ollama options. Worth having found, and worth
+recording that it was found by comparing two runs rather than by reading code.
+
+### Verification
+
+```
+npm test           25 files, 259 tests passed
+npm run typecheck  clean
+npm run eval                       81%, 8/10 exact, 0 critical misses, 0 false positives
+npm run eval -- --provider=rules   93%, unchanged — no regression in the fallback
+```

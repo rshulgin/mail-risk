@@ -84,11 +84,18 @@ async function main(): Promise<number> {
 
   console.log(`cases      ${cases.length}\n`);
 
+  // Process in the same chronological order the server seeds in, so the
+  // cross-email context each email sees here matches production. Results are
+  // still reported in dataset order below.
+  const chronological = [...cases].sort((a, b) =>
+    (seedById.get(a.id)?.date ?? '').localeCompare(seedById.get(b.id)?.date ?? ''),
+  );
+
   const scores: CaseScore[] = [];
   const health = { degraded: 0, failed: 0, extractionFallbacks: 0, riskFallbacks: 0, retries: 0 };
   const startedAt = Date.now();
 
-  for (const testCase of cases) {
+  for (const testCase of chronological) {
     const seed = seedById.get(testCase.id);
     if (!seed) continue;
 
@@ -146,7 +153,12 @@ async function main(): Promise<number> {
   console.log(`\n${'-'.repeat(78)}`);
   console.log('  id    expected  actual    risk   tags    entities  rels    overall');
   console.log(`  ${'-'.repeat(74)}`);
-  for (const score of scores) {
+  const caseOrder = new Map(cases.map((testCase, index) => [testCase.id, index]));
+  const ordered = [...scores].sort(
+    (a, b) => (caseOrder.get(a.id) ?? 0) - (caseOrder.get(b.id) ?? 0),
+  );
+
+  for (const score of ordered) {
     const flags = [
       score.criticalMiss ? 'CRITICAL MISS' : '',
       score.forbiddenTagsPresent.length ? `forbidden: ${score.forbiddenTagsPresent.join(',')}` : '',

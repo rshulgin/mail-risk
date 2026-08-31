@@ -109,7 +109,17 @@ export function createIngestService(storage: Storage) {
       const inserted: EmailRecord[] = [];
       let skipped = 0;
 
-      for (const seed of corpus.emails) {
+      // Chronological, not file order. The pipeline builds cross-email context
+      // as it goes, so an email must be processed after the ones that precede
+      // it in time — otherwise E004 (a redirected invoice, 4 June) is assessed
+      // before E009 (the legitimate invoice from the same vendor, 4 May) has
+      // established which account was actually on file. File order would make
+      // that history arrive too late to be useful.
+      const chronological = [...corpus.emails].sort((a, b) =>
+        (a.date || '').localeCompare(b.date || ''),
+      );
+
+      for (const seed of chronological) {
         if (storage.emails.findByExternalId(seed.id)) {
           skipped += 1;
           continue;

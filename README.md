@@ -40,7 +40,7 @@ The pipeline falls back to deterministic heuristics and the UI says so in a
 banner. Rule-based output is never presented as though a model produced it.
 
 ```bash
-npm test         # 250 tests, no model or network required
+npm test         # 259 tests, no model or network required
 npm run eval     # score the pipeline against the golden dataset
 npm run build    # production build of the web app
 ```
@@ -172,14 +172,19 @@ alone.
 
 | Model | Overall | Exact risk | Critical misses | Rules fallbacks | Wall clock |
 | --- | --- | --- | --- | --- | --- |
-| **`llama3.2:3b`** (default) | **84%** | 9/10 | 0 | 0 | 12.9 min |
+| **`llama3.2:3b`** (default) | **81%** | 8/10 (+2 adjacent) | 0 | 2 | 21.3 min |
 | `phi3:mini` | 79% | 7/10 | 0 | 3 | 30.2 min |
 | `qwen2.5:3b` | 71% | 8/10 | 1 | 0 | 9.5 min |
 | `mistral:latest` | *not measurable* | — | — | 15 | 53.4 min |
 | `rules` (no model) | 93% | 10/10 | 0 | — | ~0s |
 
-Two numbers in that table need explaining, and both are more interesting than
-the headline.
+The `llama3.2:3b` row is measured *with* cross-email context enabled (see
+below), which trades a little headline score for the thing that actually
+matters: **zero critical misses and zero false positives**. The earlier
+context-free run scored 84% but missed E004 outright.
+
+Two other numbers need explaining, and both are more interesting than the
+headline.
 
 **`mistral` is not measurable at the default timeout.** Its per-email times
 cluster at exactly 361.5s — 2 agents × 3 attempts × the 60s `AGENT_TIMEOUT_MS`.
@@ -190,6 +195,51 @@ It timed out on every call and was carried entirely by the rules fallback. Set
 against these ten emails and is pinned to them by tests. It is fitted to the
 corpus and would degrade sharply on an eleventh email. It exists to keep the
 app usable when no model is reachable, not to win the benchmark.
+
+### Cross-email context
+
+The hardest signal in the corpus is not in any single email. **E009** (4 May) is
+a routine Northgate invoice paid to account …6621. **E004** (4 June) is the same
+vendor, politely announcing "updated payment details" for account …9902. Read
+alone, E004 is unremarkable — and `llama3.2:3b` originally rated it `low`,
+reasoning in its own words that a change of payment account is "a routine
+business update".
+
+So Agent B is given the mailbox's memory of the parties in front of it. Before
+it runs, the orchestrator takes the sender, the recipients and any account
+numbers Agent A found, looks up what the graph already knows about them, and
+renders it into the prompt:
+
+```
+--- PRIOR CONTEXT FROM EARLIER EMAILS ---
+- organization "northgate-suppliers.com": seen in 1 earlier email, last on
+  2026-05-04, highest risk so far: none. Previously linked to: account "6621"
+  (holds account).
+```
+
+An email is never shown its own history, which matters on reprocessing.
+
+**This only works if emails are processed in the order they arrived.** Seed
+order in the file is E001…E010, which would assess E004 a full email *before*
+E009 exists to contradict it. Seeding is therefore chronological, and the queue
+orders by `(created_at, rowid)` — ten inserts land inside the same millisecond,
+so without the rowid tiebreak the order was effectively arbitrary.
+
+Measured effect on `llama3.2:3b`:
+
+| | Without context | With context |
+| --- | --- | --- |
+| Overall | 71% | **81%** |
+| Critical misses | **1 (E004)** | **0** |
+| Tag recall | 44% | 78% |
+| Relationship recall | 50% | 67% |
+
+The cost is honest and worth stating: the extra prompt guidance initially made
+the model over-eager, tagging the *legitimate* E009 invoice as
+`payment-redirect`. That needed a precondition spelled out in the prompt — an
+invoice restating its usual account is not a redirect — after which false
+positives returned to zero. The longer prompt also pushes `llama3.2:3b` into the
+rules fallback slightly more often (2 of 10 emails).
 
 ### Attribution
 
@@ -209,7 +259,7 @@ as the recommendation.
 
 ## Testing
 
-250 tests across 24 files. `npm test` needs no model and no network — the
+259 tests across 25 files. `npm test` needs no model and no network — the
 pipeline is exercised through a scriptable fake provider and the rules path.
 
 Covered failure modes: model timeout, transient provider error, unparseable
@@ -227,16 +277,7 @@ miss** rather than averaged away.
 
 ## Tradeoffs and what I'd do next
 
-**E004 is the one critical miss.** The redirected-invoice email is rated `low`
-by `llama3.2:3b`, which reasons that changing payment details is "a routine
-business update". The real tell is cross-email — E009 establishes account …6621
-as the account on file for the same vendor — and a single-email pipeline cannot
-see it. **The highest-value next step is feeding the entity graph back into
-Agent B**: when an email mentions an entity already in the graph, include its
-history in the prompt. The data model already supports this; only the prompt
-assembly is missing.
-
-Other things I would do with more time, roughly in order:
+Things I would do with more time, roughly in order:
 
 - **Entity resolution beyond formatting.** An LLM-assisted merge pass for
   near-matches, with the deterministic layer as a floor and human review for

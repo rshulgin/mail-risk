@@ -1,4 +1,5 @@
 import { renderEmailForAgent, type ExtractionResult, type RawEmail } from '@mri/shared';
+import type { PriorEntityContext } from '../storage/types.js';
 import { SUGGESTED_RELATIONSHIP_TYPES } from '@mri/shared';
 import { SUGGESTED_RISK_TAGS } from '@mri/shared';
 
@@ -46,6 +47,8 @@ Entities: people, organizations, amounts, accounts and locations that actually a
 
 Relationships: directed links between entities you listed. Every source and target must be one of the entity names above, spelled the same way. Suggested types (use others if they fit better): ${SUGGESTED_RELATIONSHIP_TYPES.join(', ')}.
 
+When a PRIOR CONTEXT section is present, it lists what this mailbox already knows about the parties and accounts in this email. Compare the email against it. A detail that contradicts the history is a strong signal: a supplier that has always been paid to one bank account now supplying different details is the classic invoice-redirection pattern, and it is high risk even when the email itself reads as routine and polite.
+
 Escalate to high when you see any of the following — these are the categories this team exists to catch:
 - a request to change payment or bank details for an existing supplier or counterparty
 - internal, confidential or client material being sent to a personal mailbox
@@ -54,12 +57,45 @@ Escalate to high when you see any of the following — these are the categories 
 - a credential or password request routed through a link, especially from a lookalike domain
 - an urgent payment or wire request that bypasses normal channels or asks for secrecy
 
+Apply "payment-redirect" only when the email actually asks for payment details to be changed or replaced. An invoice that simply states the account it has always used is not a redirect, and tagging it as one is a false alarm.
+
 The rationale is one or two sentences citing the specific evidence.
 "confidence" is a number between 0 and 1, not a percentage.
 
 Return JSON only.`;
 
-export function buildRiskPrompt(email: RawEmail, extraction: ExtractionResult): string {
+/**
+ * Renders what the mailbox already knows about the parties in this email.
+ *
+ * Written as prose rather than JSON: the point is for a small model to *read*
+ * it and notice a contradiction, and prose survives that better than a nested
+ * object does.
+ */
+export function renderPriorContext(context: readonly PriorEntityContext[]): string {
+  if (context.length === 0) return '';
+
+  const lines = context.map((entry) => {
+    const when = entry.lastSeenAt ? `, last on ${entry.lastSeenAt.slice(0, 10)}` : '';
+    const risk = entry.highestRisk ? `, highest risk so far: ${entry.highestRisk}` : '';
+    const seen = `seen in ${entry.emailCount} earlier email${entry.emailCount === 1 ? '' : 's'}${when}${risk}`;
+
+    const related = entry.related.length
+      ? `. Previously linked to: ${entry.related
+          .map((link) => `${link.type} "${link.name}" (${link.relationship.replace(/_/g, ' ')})`)
+          .join(', ')}`
+      : '';
+
+    return `- ${entry.type} "${entry.name}": ${seen}${related}.`;
+  });
+
+  return `\n--- PRIOR CONTEXT FROM EARLIER EMAILS ---\n${lines.join('\n')}\n`;
+}
+
+export function buildRiskPrompt(
+  email: RawEmail,
+  extraction: ExtractionResult,
+  priorContext: readonly PriorEntityContext[] = [],
+): string {
   return `Assess this email.
 
 --- ORIGINAL EMAIL ---
@@ -76,7 +112,8 @@ ${JSON.stringify(
   },
   null,
   2,
-)}`;
+)}
+${renderPriorContext(priorContext)}`;
 }
 
 /**

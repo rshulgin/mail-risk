@@ -13,6 +13,7 @@ import { resolveEndpoint, type ResolvableEntity } from './endpoint-resolver.js';
 import type {
   EmailGraph,
   EntityRecord,
+  PriorEntityContext,
   EntityWithMention,
   GraphEdge,
   GraphNode,
@@ -304,6 +305,107 @@ export function createGraphRepo(db: DatabaseSync) {
       }
 
       return { nodes: [...nodes.values()], edges: [...edges.values()] };
+    },
+
+    /**
+     * What the mailbox already knows about these entities.
+     *
+     * This is the cross-email memory Agent B needs. A single email cannot tell
+     * you that a supplier's bank details have changed — only the history can.
+     * Given the parties and account numbers pulled out of the current email,
+     * this returns each one's prior appearances and the entities it was linked
+     * to before, so the prompt can carry that in.
+     *
+     * `excludeEmailId` keeps an email from being told about itself, which
+     * matters on reprocessing.
+     */
+    getPriorContext(
+      candidates: readonly { type: EntityType; name: string }[],
+      excludeEmailId: string,
+    ): PriorEntityContext[] {
+      const seen = new Set<string>();
+      const results: PriorEntityContext[] = [];
+
+      for (const candidate of candidates) {
+        const canonicalKey = normalizeEntityKey(candidate.type, candidate.name);
+        if (!canonicalKey || seen.has(`${candidate.type}:${canonicalKey}`)) continue;
+        seen.add(`${candidate.type}:${canonicalKey}`);
+
+        const row = db
+          .prepare('SELECT * FROM entities WHERE type = ? AND canonical_key = ?')
+          .get(candidate.type, canonicalKey) as EntityRow | undefined;
+        if (!row) continue;
+
+        const entity = toEntity(row);
+
+        const history = db
+          .prepare(
+            `SELECT COUNT(DISTINCT m.email_id) AS email_count,
+                    MAX(COALESCE(e.sent_at, e.created_at)) AS last_seen_at
+               FROM entity_mentions m
+               JOIN emails e ON e.id = m.email_id AND e.latest_run_id = m.run_id
+              WHERE m.entity_id = ? AND m.email_id != ?`,
+          )
+          .get(entity.id, excludeEmailId) as
+          | { email_count: number; last_seen_at: string | null }
+          | undefined;
+
+        // Never mentioned anywhere else: nothing useful to say about it.
+        if (!history || history.email_count === 0) continue;
+
+        const levels = (
+          db
+            .prepare(
+              `SELECT DISTINCT r.level AS level
+                 FROM entity_mentions m
+                 JOIN emails e ON e.id = m.email_id AND e.latest_run_id = m.run_id
+                 JOIN risk_assessments r ON r.run_id = e.latest_run_id
+                WHERE m.entity_id = ? AND m.email_id != ?`,
+            )
+            .all(entity.id, excludeEmailId) as { level: string }[]
+        ).map((r) => r.level as RiskLevel);
+
+        const related = (
+          db
+            .prepare(
+              `SELECT other.type AS type, other.display_name AS name, r.type AS relationship,
+                      CASE WHEN r.source_entity_id = ? THEN 'outgoing' ELSE 'incoming' END AS direction
+                 FROM relationships r
+                 JOIN emails e ON e.id = r.email_id AND e.latest_run_id = r.run_id
+                 JOIN entities other
+                   ON other.id = CASE WHEN r.source_entity_id = ? THEN r.target_entity_id
+                                      ELSE r.source_entity_id END
+                WHERE (r.source_entity_id = ? OR r.target_entity_id = ?)
+                  AND r.email_id != ?
+                GROUP BY other.id, r.type, direction
+                LIMIT 12`,
+            )
+            .all(entity.id, entity.id, entity.id, entity.id, excludeEmailId) as {
+            type: string;
+            name: string;
+            relationship: string;
+            direction: string;
+          }[]
+        ).map((r) => ({
+          type: r.type as EntityType,
+          name: r.name,
+          relationship: r.relationship,
+          direction: r.direction as 'incoming' | 'outgoing',
+        }));
+
+        results.push({
+          id: entity.id,
+          type: entity.type,
+          name: entity.displayName,
+          canonicalKey: entity.canonicalKey,
+          emailCount: history.email_count,
+          lastSeenAt: history.last_seen_at,
+          highestRisk: levels.reduce<RiskLevel | null>((best, level) => higherRisk(best, level), null),
+          related,
+        });
+      }
+
+      return results;
     },
 
     getEntity(id: string): EntityRecord | null {

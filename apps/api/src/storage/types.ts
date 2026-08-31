@@ -118,3 +118,26 @@ export interface EmailGraph {
 }
 
 export type { ExtractionResult };
+
+/**
+ * An entity's history, as fed back into Agent B.
+ *
+ * Deliberately small: a prompt has a budget, and what matters is "have we seen
+ * this party before, was it risky, and what was it connected to" — not the
+ * full subgraph.
+ */
+export interface PriorEntityContext {
+  id: string;
+  type: EntityType;
+  name: string;
+  canonicalKey: string;
+  emailCount: number;
+  lastSeenAt: string | null;
+  highestRisk: RiskLevel | null;
+  related: {
+    type: EntityType;
+    name: string;
+    relationship: string;
+    direction: 'incoming' | 'outgoing';
+  }[];
+}

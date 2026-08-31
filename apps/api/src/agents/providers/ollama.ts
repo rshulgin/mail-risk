@@ -5,6 +5,9 @@ import {
   type LlmRequest,
 } from '../provider.js';
 
+/** Fixed so repeated runs are comparable. Any constant would do. */
+const OLLAMA_SEED = 42;
+
 interface OllamaChatResponse {
   message?: { content?: string };
 }
@@ -55,9 +58,13 @@ export function createOllamaProvider(options: {
               { role: 'user', content: request.prompt },
             ],
             options: {
-              // Deterministic: this is a classification task, not a creative
-              // one, and the eval needs runs to be comparable.
+              // This is a classification task, not a creative one.
               temperature: 0,
+              // temperature 0 alone is *not* reproducible: sampling still
+              // varies run to run, and two eval runs of the same corpus
+              // disagreed by 40 points on individual emails. A fixed seed
+              // makes the eval a regression gate rather than a weather report.
+              seed: OLLAMA_SEED,
               num_ctx: 8192,
             },
           }),

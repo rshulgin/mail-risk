@@ -197,7 +197,15 @@ export function createEmailRepo(db: DatabaseSync) {
     /** Ids awaiting work, oldest first — used to refill the queue on boot. */
     idsWithStatus(status: EmailStatus): string[] {
       return (
-        db.prepare('SELECT id FROM emails WHERE status = ? ORDER BY created_at').all(status) as {
+        db
+          .prepare(
+            // rowid as tiebreak: seeding ten emails takes well under a
+            // millisecond, so created_at ties and the queue would pick them up
+            // in arbitrary order — defeating the chronological seeding that
+            // cross-email context depends on.
+            'SELECT id FROM emails WHERE status = ? ORDER BY created_at, rowid',
+          )
+          .all(status) as {
           id: string;
         }[]
       ).map((row) => row.id);

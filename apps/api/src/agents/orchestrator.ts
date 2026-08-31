@@ -8,6 +8,7 @@ import {
   type RunStatus,
 } from '@mri/shared';
 import type { Storage } from '../storage/index.js';
+import type { EntityType } from '@mri/shared';
 import { heuristicExtraction, heuristicRiskGraph } from './heuristics.js';
 import {
   EXTRACTION_SYSTEM_PROMPT,
@@ -50,6 +51,35 @@ export interface RunOutcome {
   riskSource: 'model' | 'rules';
   entityCount: number;
   relationshipCount: number;
+  /** How many known entities the risk agent was given history for. */
+  priorContextCount: number;
+}
+
+/**
+ * Which entities to look up history for, before Agent B has produced any.
+ *
+ * Derived from the parties on the envelope and the account and reference
+ * numbers Agent A found — the identifiers that make a counterparty recognisable
+ * across emails. Amounts are excluded deliberately: two emails sharing a figure
+ * is usually coincidence, and it would crowd the prompt.
+ */
+export function priorContextCandidates(
+  email: RawEmail,
+  extraction: ExtractionResult,
+): { type: EntityType; name: string }[] {
+  const candidates: { type: EntityType; name: string }[] = [];
+
+  for (const address of [email.from, ...email.to].filter(Boolean)) {
+    candidates.push({ type: 'person', name: address });
+    const domain = address.split('@')[1]?.trim();
+    if (domain) candidates.push({ type: 'organization', name: domain });
+  }
+
+  for (const fact of extraction.facts) {
+    if (fact.kind === 'account') candidates.push({ type: 'account', name: fact.value });
+  }
+
+  return candidates;
 }
 
 export function createOrchestrator(options: OrchestratorOptions) {
@@ -121,12 +151,20 @@ export function createOrchestrator(options: OrchestratorOptions) {
         let assessment: RiskGraphResult;
         let riskSource: 'model' | 'rules' = 'rules';
 
+        // The cross-email memory: what this mailbox already knows about the
+        // parties here. This is what lets Agent B notice that a supplier's
+        // bank details have changed, which no single email can reveal.
+        const priorContext = storage.graph.getPriorContext(
+          priorContextCandidates(email, extraction),
+          emailId,
+        );
+
         if (provider) {
           const outcome = await runAgent({
             agent: 'risk_graph',
             provider,
             system: RISK_SYSTEM_PROMPT,
-            prompt: buildRiskPrompt(email, extraction),
+            prompt: buildRiskPrompt(email, extraction, priorContext),
             schema: riskGraphResultSchema,
             timeoutMs,
             maxRetries,
@@ -175,6 +213,7 @@ export function createOrchestrator(options: OrchestratorOptions) {
           riskSource,
           entityCount: fragment.entityCount,
           relationshipCount: fragment.relationshipCount,
+          priorContextCount: priorContext.length,
         };
       } catch (error) {
         // Reached only on an unexpected fault — a storage error, or heuristics
@@ -193,6 +232,7 @@ export function createOrchestrator(options: OrchestratorOptions) {
           riskSource: 'rules',
           entityCount: 0,
           relationshipCount: 0,
+          priorContextCount: 0,
         };
       }
     },
