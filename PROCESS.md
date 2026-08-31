@@ -654,8 +654,12 @@ of the same code disagreeing by 40 points on an email makes the eval a weather
 report rather than a regression gate, and it means some of the run-to-run deltas
 I attributed to my changes earlier in this project were partly noise.
 
-Fixed by pinning `seed` in the Ollama options. Worth having found, and worth
-recording that it was found by comparing two runs rather than by reading code.
+Fixed by pinning `seed` in the Ollama options, and then *verified* rather than
+assumed: two runs of the same two emails now return identical risk levels and
+identical scores (`E001 high 73%`, `E002 none 100%`, both runs).
+
+Worth having found, and worth recording that it was found by comparing two runs
+rather than by reading code.
 
 ### Verification
 
@@ -664,4 +668,13 @@ npm test           25 files, 259 tests passed
 npm run typecheck  clean
 npm run eval                       81%, 8/10 exact, 0 critical misses, 0 false positives
 npm run eval -- --provider=rules   93%, unchanged — no regression in the fallback
+npm run eval -- --limit=2 (twice)  identical results, seed holds
 ```
+
+One subtlety the determinism check surfaced: `--limit=2` scores E001 at 73%
+while the full run scores it 88%. That is not instability — with only two cases
+in play, E001 has no earlier emails to draw context from, whereas in a full run
+it is assessed after E009 and others. The cross-email context means **a case's
+score now depends on what preceded it**, which is exactly the intended
+behaviour and a real change to how the eval must be read: `--limit` is a
+smoke test, not a scaled-down benchmark.
